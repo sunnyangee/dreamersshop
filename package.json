@@ -1,7 +1,7 @@
 {
   "name": "shop",
   "version": "1.0.0",
-  "main": "jwt_generate.js",
+  "main": "netlify/functions/jwt_generate.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -10,9 +10,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "jsonwebtoken": "^9.0.2",
-    "express": "^4.18.2",
-    "cors": "^2.8.5"
+    "jsonwebtoken": "^9.0.2"
 
   }
 }
