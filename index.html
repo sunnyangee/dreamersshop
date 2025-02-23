@@ -72,13 +72,13 @@
     <script>
         const sheetId = "13q7V1WQiTUYB5DIclCRx_g4dQxXFEFTPY5WV7G-QJf0"; 
         const shopRange = "shop!A2:C100"; 
-        const statsRange = "stats!A2:G100"; 
-        const jwtEndpoint = "/.netlify/functions/generate-jwt";  // ✅ Netlify 서버리스 함수 URL
+        const jwtEndpoint = "/.netlify/functions/jwt_generate";  // ✅ Netlify 서버리스 함수 URL
 
         async function getAccessToken() {
             console.log("🔄 JWT 갱신 중...");
 
             try {
+                // 🔥 Netlify에서 JWT 생성 요청
                 const jwtResponse = await fetch(jwtEndpoint, {  
                     method: "GET",
                     headers: { "Content-Type": "application/json" }
@@ -91,6 +91,7 @@
                 const jwtData = await jwtResponse.json();
                 console.log("✅ 새로운 JWT 생성 완료:", jwtData.token);
 
+                // 🔥 JWT를 OAuth2 액세스 토큰으로 변환
                 const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
                     method: "POST",
                     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -112,16 +113,22 @@
 
         async function loadShopItems() {
             const accessToken = await getAccessToken();
+            if (!accessToken) {
+                console.error("❌ Google Sheets API 호출 불가 (액세스 토큰 없음)");
+                return;
+            }
+
             const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${shopRange}`;
 
             fetch(url, {
                 method: "GET",
                 headers: {
-                    "Authorization": `Bearer ${accessToken}`  
+                    "Authorization": `Bearer ${accessToken}`
                 }
             })
             .then(response => response.json())
             .then(data => {
+                console.log("📜 상점 데이터:", data);
                 if (!data.values) {
                     document.getElementById("shop-items").innerHTML = "<p>상점에 상품이 없습니다.</p>";
                     return;
@@ -138,7 +145,7 @@
                             <p><strong>${itemName}</strong></p>
                             <p>가격: ${price} 코인</p>
                             <p>${description}</p>
-                            <button class="button" onclick="askForUserId('${itemName}', ${price})">구매</button>
+                            <button class="button" onclick="alert('아직 구매 기능이 구현되지 않았습니다.')">구매</button>
                         </div>
                     `;
                 });
