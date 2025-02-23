@@ -73,28 +73,34 @@
         const sheetId = "13q7V1WQiTUYB5DIclCRx_g4dQxXFEFTPY5WV7G-QJf0"; 
         const shopRange = "shop!A2:C100"; 
         const statsRange = "stats!A2:G100"; 
-        const jwtEndpoint = "/.netlify/functions/generate-jwt";  
+        const jwtEndpoint = "/.netlify/functions/jwt_generate";  
 
         async function getAccessToken() {
             console.log("🔄 JWT 갱신 중...");
+
             try {
                 const jwtResponse = await fetch(jwtEndpoint, {  
                     method: "GET",
                     headers: { "Content-Type": "application/json" }
                 });
+
                 if (!jwtResponse.ok) {
                     throw new Error("JWT 생성 서버 오류: " + jwtResponse.status);
                 }
+
                 const jwtData = await jwtResponse.json();
                 console.log("✅ 새로운 JWT 생성 완료:", jwtData.token);
+
                 const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
                     method: "POST",
                     headers: { "Content-Type": "application/x-www-form-urlencoded" },
                     body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwtData.token}`
                 });
+
                 if (!tokenResponse.ok) {
                     throw new Error("OAuth2 토큰 요청 실패: " + tokenResponse.status);
                 }
+
                 const tokenData = await tokenResponse.json();
                 console.log("✅ OAuth2 액세스 토큰 획득:", tokenData.access_token);
                 return tokenData.access_token;
@@ -106,24 +112,33 @@
 
         async function loadShopItems() {
             const accessToken = await getAccessToken();
+            if (!accessToken) {
+                console.error("❌ Google Sheets API 호출 불가 (액세스 토큰 없음)");
+                return;
+            }
+
             const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${shopRange}`;
+
             fetch(url, {
                 method: "GET",
                 headers: {
-                    "Authorization": `Bearer ${accessToken}`  
+                    "Authorization": `Bearer ${accessToken}`
                 }
             })
             .then(response => response.json())
             .then(data => {
+                console.log("📜 상점 데이터:", data);
                 if (!data.values) {
                     document.getElementById("shop-items").innerHTML = "<p>상점에 상품이 없습니다.</p>";
                     return;
                 }
+
                 let itemsHTML = "";
                 data.values.forEach(row => {
                     const itemName = row[0];
                     const price = row[1];
                     const description = row[2];
+
                     itemsHTML += `
                         <div class="shop-item">
                             <p><strong>${itemName}</strong></p>
@@ -133,6 +148,7 @@
                         </div>
                     `;
                 });
+
                 document.getElementById("shop-items").innerHTML = itemsHTML;
             })
             .catch(error => console.error("Error:", error));
@@ -145,6 +161,79 @@
                 return;
             }
             buyItem(userId, itemName, price);
+        }
+
+        async function buyItem(userId, itemName, price) {
+            const accessToken = await getAccessToken();
+            const statsUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${statsRange}`;
+
+            fetch(statsUrl, {
+                method: "GET",
+                headers: {
+                    "Authorization": `Bearer ${accessToken}`
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.values) {
+                    alert("캐릭터 데이터를 불러올 수 없습니다.");
+                    return;
+                }
+
+                let characterRow = null;
+                let characterData = null;
+                data.values.forEach((row, index) => {
+                    if (row[0] === userId) {
+                        characterRow = index + 2;
+                        characterData = row;
+                    }
+                });
+
+                if (!characterData) {
+                    alert("해당 ID의 캐릭터를 찾을 수 없습니다.");
+                    return;
+                }
+
+                let currentCoins = Number(characterData[4]);
+                if (currentCoins < price) {
+                    alert("코인이 부족합니다.");
+                    return;
+                }
+
+                let newCoins = currentCoins - price;
+                let newItems = characterData[3] === "-" ? itemName : `${characterData[3]}, ${itemName}`;
+
+                updateCharacterData(characterRow, newCoins, newItems, accessToken);
+            })
+            .catch(error => console.error("Error:", error));
+        }
+
+        async function updateCharacterData(row, newCoins, newItems, accessToken) {
+            const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/stats!D${row}:E${row}?valueInputOption=RAW`;
+
+            const updateData = {
+                range: `stats!D${row}:E${row}`,
+                majorDimension: "ROWS",
+                values: [[newItems, newCoins]]
+            };
+
+            fetch(updateUrl, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${accessToken}`
+                },
+                body: JSON.stringify(updateData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.updatedRows) {
+                    alert("구매 완료! 남은 코인: " + newCoins);
+                } else {
+                    alert("구매 실패.");
+                }
+            })
+            .catch(error => console.error("Error:", error));
         }
 
         loadShopItems();
